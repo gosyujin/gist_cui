@@ -29,7 +29,7 @@ module GistCui
   end
 
   # GET /gists/:id
-def gist(id)
+  def gist(id)
     d = attack(:GET, "#{GISTS_API_URL}/#{id}")
 
     output(d)
@@ -73,7 +73,7 @@ def gist(id)
     query = param.sort.map{ |q| q.join("=") }.join("&")
 
     uri = "https://github.com/login/oauth/authorize?#{query}"
-    puts attack(:GET2, uri)
+    puts attack(:GET, uri)
 
     puts "1. Access url 2. get 'code' 3. paste 'code' this prompt and enter"
     code = STDIN.gets.chomp!
@@ -159,17 +159,10 @@ private
     http.ca_file = ca_file
     http.verify_mode = OpenSSL::SSL::VERIFY_PEER
     http.verify_depth = 5
-    
+
     http.start do |http|
       case method
       when :GET
-        req = Net::HTTP::Get.new(uri.request_uri)
-        http.request(req) do |res|
-          return res.body
-          # return JSON.load(res.body)
-        end
-      # Merge GET
-      when :GET2
         req = Net::HTTP::Get.new(uri.request_uri)
         http.request(req) do |res|
           return res.body
@@ -178,7 +171,7 @@ private
         req = Net::HTTP::Post.new(uri.request_uri, header)
         req.body = JSON.generate(body)
         http.request(req) do |res|
-          return JSON.load(res.body)
+          return res.body
         end
       # Merge POST
       when :POST2
@@ -186,10 +179,14 @@ private
           return res.body
         end
       when :PATCH
+        if RUBY_VERSION == "1.9.2" or RUBY_VERSION.to_f <= 1.8 then
+          puts "edit is required ruby more then 1.9.3"
+          exit 1
+        end
         req = Net::HTTP::Patch.new(uri.request_uri, header)
         req.body = JSON.generate(body)
         http.request(req) do |res|
-          return JSON.load(res.body)
+          return res.body
         end
       when :DELETE
         req = Net::HTTP::Delete.new(uri.request_uri, header)
@@ -205,19 +202,23 @@ private
 end
 
 if $0 == __FILE__ then
-id = "5464265"
-user = "gosyujin"
+  id = "5472739"
+  user = "gosyujin"
 
-GistCui.gists
-GistCui.gists(user)
-GistCui.gist(id)
-GistCui.edit(id, "./lib/test.txt", "dest")
+  puts "#### show gists"
+  GistCui.gists
+  puts "#### show #{user}'s gists"
+  GistCui.gists(user)
+  puts "#### show #{id}'s gist"
+  GistCui.gist(id)
+  puts "#### edit gist"
+  GistCui.edit(id, "./hoge.txt", "dest")
 
-# found
-json = GistCui.create("./lib/test.txt", "dest")
-GistCui.delete(json["id"]) # => 204
+  puts "#### create and delete gist"
+  json = GistCui.create("./hoge.txt", "dest")
+  GistCui.delete(json["id"]) # => 204
 
-# not found
-GistCui.create("./notfound.txt")
-GistCui.delete("5464465") # => 404
+  puts "#### not found gist"
+  GistCui.create("./notfound.txt")
+  GistCui.delete("5464465") # => 404
 end
