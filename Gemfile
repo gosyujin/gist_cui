@@ -5,3 +5,4 @@ gemspec
 
 gem 'pit'
 gem 'rake'
+gem 'thor'
