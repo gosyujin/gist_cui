@@ -21,39 +21,39 @@ module GistCui
     # GET /repos/:user/:repository/:number
     desc "issues",
          "get issues(DEFAULT: all issues current repository from github)"
-    method_option :user  , aliases: "-u", type: :string , desc: "github user(DEFAULT: origin user)"
-    method_option :repo  , aliases: "-r", type: :string , desc: "user's repository(DEFAULT: origin repository)"
-    method_option :num   , aliases: "-n", type: :string , desc: "a issue number"
-    method_option :closed, aliases: "-c", type: :boolean, desc: "get CLOSED issue"
+    method_option :user  , aliases: "-u", type: :string ,
+                  desc: "github user(DEFAULT: origin user)"
+    method_option :repo  , aliases: "-r", type: :string ,
+                  desc: "user's repository(DEFAULT: origin repository)"
+    method_option :num   , aliases: "-n", type: :string ,
+                  desc: "a issue number"
+    method_option :closed, aliases: "-c", type: :boolean,
+                  desc: "get CLOSED issue"
     def issue
-      remote = `git remote -v`
-      remote.match(/github\.com[\/:](.*)\.git/)
-      @user, @repository = $1.split("/")
+      repos = current_repos_and_user
 
-      @user = options[:user] unless options[:user].nil?
-      @repository = options[:repo] unless options[:repo].nil?
-      number = options[:num].nil? ? nil : "#{options[:num]}"
-      state = options[:closed] ? "closed" : "open"
+      user   = options[:user].nil? ? repos["user"] : options[:user]
+      repo   = options[:repo].nil? ? repos["repo"] : options[:repo]
+      number = options[:num].nil?  ? nil           : "#{options[:num]}"
+      state  = options[:closed]    ? "closed"      : "open"
 
-      end_point = "#{GH_API_URL}/repos/#{@user}/#{@repository}/issues"
-      end_point = "#{end_point}/#{number}" unless number.nil?
-      end_point = "#{end_point}?state=#{state}"
+      end_point = "#{GH_API_URL}/repos/#{user}/#{repo}/issues"
+      end_point += "/#{number}" unless number.nil?
+      end_point += "?state=#{state}"
+
       issues = request(:GET, end_point)
 
-      puts "==================================================================="
       JSON.load(issues).each do |i|
-        puts "No.  | #{i["number"]} ( Status: #{i["state"]} )"
-        puts "Title| #{i["title"]} ( #{i["user"]["login"]} )"
-        puts "-----+-------------------------------------------------------------"
+        puts "No.#{i["number"]} #{i["state"]} (#{i["user"]["login"]}): #{i["title"]}"
+        puts "--"
         puts "#{i["body"]}" unless i["body"] == ""
         unless i["comments"] == 0 then
-          JSON.load(comments(i["number"])).each do |c|
-            puts "----+-------------------------------------------"
-            puts ">Res| #{c["user"]["login"]} "
-            puts "----+-------------------------------------------"
+          JSON.load(issue_comments(user, repo, i["number"])).each do |c|
+            puts ">>>>>>>>>>>>>>>>>>>>>>"
+            puts "> #{c["user"]["login"]}"
             puts "#{c["body"]}"
-      end
-    end
+          end
+        end
         puts "==================================================================="
       end
     end
@@ -62,19 +62,19 @@ module GistCui
     desc "create",
          "create issue"
     def create
-      remote = `git remote -v`
-      remote.match(/github\.com\/(.*)\.git/)
-      @user, @repository = $1.split("/")
+      repos = current_repos_and_user
 
-      @user = options[:user] unless options[:user].nil?
-      @repository = options[:repo] unless options[:repo].nil?
+      user   = options[:user].nil? ? repos["user"] : options[:user]
+      repo   = options[:repo].nil? ? repos["repo"] : options[:repo]
 
-      end_point = "#{GH_API_URL}/repos/#{@user}/#{@repository}/issues"
+      end_point = "#{GH_API_URL}/repos/#{user}/#{repo}/issues"
       data = {}
-      data['title'] = "Test issue"
+
+      data['title'] = "hohogeri"
 
       issue = request(:POST, end_point, auth_header, data)
-      puts issue
+      issue = JSON.load(issue)
+      puts "#{issue["title"]} #{issue["url"]}"
     end
 
     # GET /users/:user/gists
@@ -141,9 +141,20 @@ module GistCui
     end
 
   private
+    def current_repos_and_user
+      repos = {}
+
+      remote = `git remote -v`
+      remote.match(/github\.com[\/:](.*)\.git/)
+      repos["user"], repos["repo"] = $1.split("/")
+      #puts "current user: #{repos["user"]}"
+      #puts "current repo: #{repos["repo"]}"
+      repos
+    end
+
     # GET /repos/:owner/:repo/issues/:number/comments
-    def comments(number)
-      end_point = "#{GH_API_URL}/repos/#{@user}/#{@repository}/issues/#{number}/comments"
+    def issue_comments(owner, repo, number)
+      end_point = "#{GH_API_URL}/repos/#{owner}/#{repo}/issues/#{number}/comments"
       request(:GET, end_point)
     end
 
@@ -260,7 +271,8 @@ module GistCui
       core = Pit.get('gist')
 
       client_id = core["client_id"]
-      scope = 'gist'
+      # FIXME: choose scope
+      scope = 'gist,user,repo'
       redirect_uri = 'http://gosyujin.github.com'
 
       param = { 'client_id'    => client_id,
